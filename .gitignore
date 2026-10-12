@@ -4,6 +4,7 @@ __pycache__/
 venv/
 instance/
 *.db
+!database/chaincircle_sample.db
 .env
 out/
 cache/

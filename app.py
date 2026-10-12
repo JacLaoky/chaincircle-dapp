@@ -60,23 +60,7 @@ with open(ABI_PATH, encoding="utf-8") as f:
 # ---------------------------------------------------------------------------
 # Database
 # ---------------------------------------------------------------------------
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS transactions (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    tx_hash       TEXT    NOT NULL UNIQUE,
-    action        TEXT    NOT NULL,
-    from_address  TEXT    NOT NULL,
-    circle_id     INTEGER,
-    value_eth     TEXT    NOT NULL DEFAULT '0',
-    status        TEXT    NOT NULL DEFAULT 'pending',
-    block_number  INTEGER,
-    gas_used      INTEGER,
-    created_at    INTEGER NOT NULL,
-    updated_at    INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_tx_from   ON transactions(from_address);
-CREATE INDEX IF NOT EXISTS idx_tx_circle ON transactions(circle_id);
-"""
+SCHEMA = (BASE_DIR / "database" / "schema.sql").read_text(encoding="utf-8")
 
 
 def get_db():
@@ -133,7 +117,10 @@ def rate_limited(limit=30, window=60):
 
 def rpc_call(method, params):
     payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
-    req = urllib.request.Request(RPC_URL, data=payload, headers={"Content-Type": "application/json"})
+    # Explicit User-Agent: public RPCs behind Cloudflare reject Python's default one (error 1010).
+    req = urllib.request.Request(
+        RPC_URL, data=payload, headers={"Content-Type": "application/json", "User-Agent": "ChainCircle/1.0"}
+    )
     with urllib.request.urlopen(req, timeout=10) as resp:
         body = json.loads(resp.read().decode())
     if "error" in body:

@@ -80,6 +80,9 @@ ChainCircle moves the whole ROSCA lifecycle into a Solidity smart contract:
 ├── abi/ChainCircle.json          # Contract ABI (used by Flask + frontend)
 ├── test/ChainCircle.t.sol        # 26 Foundry unit tests
 ├── app.py                        # Flask backend (API + SQLite + on-chain verification)
+├── database/schema.sql           # SQLite schema (loaded by app.py at startup)
+├── database/chaincircle_sample.* # Sample data exported from the live deployment (.db + .csv)
+├── scripts/export_db.py          # Snapshot the live transaction log into the sample database
 ├── templates/index.html          # Web UI
 ├── static/css/style.css          # Styles
 ├── static/js/app.js              # MetaMask / ethers.js / API logic
@@ -142,7 +145,33 @@ Gas report (Foundry, optimizer 200 runs):
 | `settleRound` | ~97k |
 | `withdraw` | ~32k |
 
-## 7. Running locally
+## 7. Database (SQLite)
+
+Schema: [`database/schema.sql`](database/schema.sql), a single `transactions` table indexed by wallet and circle.
+
+| Column | Meaning |
+|---|---|
+| `tx_hash` (unique) | Transaction hash |
+| `action` | `createCircle` / `joinCircle` / `leaveCircle` / `cancelCircle` / `contribute` / `settleRound` / `withdraw` |
+| `from_address` | Sender wallet |
+| `circle_id` | Related circle (NULL when not applicable) |
+| `value_eth` | ETH sent (decimal string) |
+| `status` | `pending` → `confirmed` / `failed` (set only after on-chain verification) |
+| `block_number`, `gas_used` | Filled from the transaction receipt |
+| `created_at`, `updated_at` | Unix timestamps |
+
+Lifecycle: the frontend `POST`s the hash after MetaMask sends the transaction (`pending`). The backend then calls
+`eth_getTransactionByHash` / `eth_getTransactionReceipt` and marks the row `confirmed` only if the receipt
+succeeded, the sender matches and the target is the ChainCircle contract. Otherwise the row is marked `failed`.
+Hashes that never appear on-chain are marked `failed` after 30 minutes.
+
+Because Render's free disk is ephemeral, snapshot the live data with:
+
+```bash
+python scripts/export_db.py        # -> database/chaincircle_sample.db + .csv
+```
+
+## 8. Running locally
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
@@ -161,7 +190,7 @@ Environment variables:
 | `EXPLORER_URL` | `https://sepolia.etherscan.io` | Block explorer |
 | `DATABASE_PATH` | `instance/chaincircle.db` | SQLite file |
 
-## 8. Deploying the smart contract (Remix + MetaMask)
+## 9. Deploying the smart contract (Remix + MetaMask)
 
 1. Get Sepolia test ETH from a faucet (e.g. Google Cloud Web3 faucet or the Alchemy Sepolia faucet).
 2. Open <https://remix.ethereum.org>, create `ChainCircle.sol`, and paste `contracts/ChainCircle.sol` into it.
@@ -170,7 +199,7 @@ Environment variables:
 5. Copy the deployed address and set it as `CONTRACT_ADDRESS`.
 6. (Optional) Verify the source on Sepolia Etherscan.
 
-## 9. Deploying the web app to Render
+## 10. Deploying the web app to Render
 
 1. Push this folder to a GitHub repository.
 2. On <https://render.com>: **New → Blueprint** → select the repo (uses `render.yaml`).
@@ -181,7 +210,7 @@ Environment variables:
 > Render's free tier has an ephemeral disk, so the SQLite history may reset when the service restarts.
 > On-chain data (circles, payments, reputation) is never lost.
 
-## 10. Testing
+## 11. Testing
 
 ### Smart contract unit tests (Foundry)
 
@@ -207,7 +236,7 @@ Use 2–3 MetaMask accounts (Account 1 = creator, Account 2/3 = members):
 6. Finish the circle; collateral is returned and completion reputation is updated.
 7. Check the **History** tab: each transaction shows as *confirmed*, with an Etherscan link.
 
-## 11. Limitations & future work
+## 12. Limitations & future work
 
 * Payout order = join order. Fair random ordering could use **Chainlink VRF**, or an auction/bidding
   ROSCA could let members bid for earlier payouts.
