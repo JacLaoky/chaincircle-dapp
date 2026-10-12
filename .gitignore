@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+instance/
+*.db
+.env
+out/
+cache/
+broadcast/
+.DS_Store
+.claude/
+*.docx

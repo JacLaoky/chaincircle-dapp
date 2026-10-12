@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChainCircle · On-chain Savings Circles</title>
+  <meta name="description" content="Trustless rotating savings and credit association (ROSCA) on Ethereum Sepolia.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='38' fill='none' stroke='%236366f1' stroke-width='14'/><circle cx='50' cy='12' r='10' fill='%2310b981'/></svg>">
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a class="brand" href="/">
+        <svg class="brand-logo" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="36" fill="none" stroke="currentColor" stroke-width="12"/>
+          <circle cx="50" cy="14" r="11" fill="#10b981"/>
+          <circle cx="81" cy="68" r="11" fill="#f59e0b"/>
+          <circle cx="19" cy="68" r="11" fill="#ec4899"/>
+        </svg>
+        <span>Chain<strong>Circle</strong></span>
+      </a>
+      <div class="topbar-right">
+        <span id="networkPill" class="pill pill-muted">Not connected</span>
+        <button id="connectBtn" class="btn btn-primary">Connect MetaMask</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="banner" class="banner hidden" role="alert"></div>
+
+  <section class="hero">
+    <div class="container hero-inner">
+      <div class="hero-text">
+        <p class="eyebrow">Rotating Savings &amp; Credit Association · Ethereum Sepolia</p>
+        <h1>Save together.<br><span class="grad">No trust required.</span></h1>
+        <p class="lead">
+          ChainCircle brings the traditional savings circle (标会 · tontine · susu · chit fund) on-chain.
+          Members contribute every round and one member receives the whole pot. Collateral and smart
+          contracts make sure <em>nobody can run away with the money</em>.
+        </p>
+      </div>
+      <div class="stats">
+        <div class="stat-card">
+          <span class="stat-label">Withdrawable balance</span>
+          <span class="stat-value" id="statBalance">—</span>
+          <button id="withdrawBtn" class="btn btn-success btn-sm" disabled>Withdraw</button>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">My reputation</span>
+          <span class="stat-value" id="statScore">—</span>
+          <span class="stat-sub" id="statRep">Connect wallet to view</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">My circles</span>
+          <span class="stat-value" id="statMine">—</span>
+          <span class="stat-sub" id="statMineSub">&nbsp;</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Circles on-chain</span>
+          <span class="stat-value" id="statTotal">—</span>
+          <span class="stat-sub" id="statTvl">&nbsp;</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <main class="container">
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="explore" role="tab">Explore</button>
+      <button class="tab" data-tab="mine" role="tab">My Circles</button>
+      <button class="tab" data-tab="create" role="tab">Create Circle</button>
+      <button class="tab" data-tab="history" role="tab">History</button>
+      <button class="tab" data-tab="how" role="tab">How it works</button>
+    </nav>
+
+    <!-- Explore -->
+    <section id="tab-explore" class="tab-panel active">
+      <div class="panel-head">
+        <h2>All circles</h2>
+        <div class="filters">
+          <button class="chip active" data-filter="all">All</button>
+          <button class="chip" data-filter="0">Open</button>
+          <button class="chip" data-filter="1">Active</button>
+          <button class="chip" data-filter="2">Completed</button>
+          <button class="btn btn-ghost btn-sm" id="refreshBtn" title="Reload from blockchain">↻ Refresh</button>
+        </div>
+      </div>
+      <div id="exploreGrid" class="grid"></div>
+    </section>
+
+    <!-- My circles -->
+    <section id="tab-mine" class="tab-panel">
+      <div class="panel-head"><h2>My circles</h2></div>
+      <div id="mineGrid" class="grid"></div>
+    </section>
+
+    <!-- Create -->
+    <section id="tab-create" class="tab-panel">
+      <div class="create-layout">
+        <form id="createForm" class="card form" novalidate>
+          <h2>Create a savings circle</h2>
+          <p class="muted">You join automatically as member #1 and receive the first pot. Your collateral is sent with this transaction.</p>
+
+          <label class="field">
+            <span>Circle name</span>
+            <input id="fName" name="name" type="text" maxlength="40" placeholder="e.g. Family Savings 2026" required>
+            <small class="err" data-for="name"></small>
+          </label>
+
+          <div class="row">
+            <label class="field">
+              <span>Contribution per round (ETH)</span>
+              <input id="fContribution" name="contribution" type="number" step="0.0001" min="0.0001" value="0.001" required>
+              <small class="err" data-for="contribution"></small>
+            </label>
+            <label class="field">
+              <span>Members (= rounds)</span>
+              <input id="fMembers" name="members" type="number" min="2" max="12" step="1" value="3" required>
+              <small class="err" data-for="members"></small>
+            </label>
+          </div>
+
+          <div class="row">
+            <label class="field">
+              <span>Round duration</span>
+              <div class="input-group">
+                <input id="fDuration" name="duration" type="number" min="1" step="1" value="5" required>
+                <select id="fDurationUnit" name="durationUnit">
+                  <option value="60" selected>minutes</option>
+                  <option value="3600">hours</option>
+                  <option value="86400">days</option>
+                </select>
+              </div>
+              <small class="err" data-for="duration"></small>
+            </label>
+            <label class="field">
+              <span>Collateral per member (ETH)</span>
+              <input id="fCollateral" name="collateral" type="number" step="0.0001" min="0.0001" value="0.002" required>
+              <small class="err" data-for="collateral"></small>
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block" id="createBtn">Create circle &amp; lock collateral</button>
+        </form>
+
+        <aside class="card summary">
+          <h3>Summary</h3>
+          <dl>
+            <dt>Pot each round</dt><dd id="sPot">—</dd>
+            <dt>You pay in total</dt><dd id="sTotal">—</dd>
+            <dt>Total duration</dt><dd id="sLength">—</dd>
+            <dt>Collateral coverage</dt><dd id="sCoverage">—</dd>
+          </dl>
+          <div class="coverage-bar"><div id="sCoverageBar"></div></div>
+          <p class="muted small" id="sCoverageHint">Collateral covers missed payments. Higher coverage = safer circle.</p>
+        </aside>
+      </div>
+    </section>
+
+    <!-- History -->
+    <section id="tab-history" class="tab-panel">
+      <div class="panel-head">
+        <h2>Transaction history</h2>
+        <div class="filters">
+          <button class="chip active" data-history="mine">My transactions</button>
+          <button class="chip" data-history="all">All transactions</button>
+        </div>
+      </div>
+      <div class="card table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Time</th><th>Action</th><th>Circle</th><th>Value (ETH)</th><th>From</th><th>Status</th><th>Tx</th></tr>
+          </thead>
+          <tbody id="historyBody">
+            <tr><td colspan="7" class="empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted small">Every transaction is recorded by the Flask backend and then independently verified against Sepolia via JSON-RPC.</p>
+    </section>
+
+    <!-- How it works -->
+    <section id="tab-how" class="tab-panel">
+      <div class="steps">
+        <div class="step card"><span class="step-n">1</span><h3>Create or join</h3><p>The creator sets the contribution, number of members and round length. Each member locks the same <b>collateral</b> to join.</p></div>
+        <div class="step card"><span class="step-n">2</span><h3>Circle starts</h3><p>When the circle is full it starts automatically. Payout order = join order and is fixed on-chain.</p></div>
+        <div class="step card"><span class="step-n">3</span><h3>Contribute each round</h3><p>Every member pays the contribution before the deadline. The last payment automatically sends the whole pot to that round's recipient.</p></div>
+        <div class="step card"><span class="step-n">4</span><h3>Defaults are covered</h3><p>If someone doesn't pay, <b>anyone</b> can settle the round after the deadline. The missing amount is taken from the defaulter's collateral.</p></div>
+        <div class="step card"><span class="step-n">5</span><h3>Withdraw</h3><p>Pots and returned collateral are credited to your balance. Click <b>Withdraw</b> to move them to your wallet (pull-payment pattern).</p></div>
+        <div class="step card"><span class="step-n">6</span><h3>Build reputation</h3><p>On-time payments, defaults and completed circles are stored on-chain — a portable credit history for the unbanked.</p></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Circle detail modal -->
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-box card">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <footer class="footer">
+    <div class="container">
+      ChainCircle · SC6113 Financial DApp · Contract:
+      <a id="contractLink" href="#" target="_blank" rel="noopener">not configured</a>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
