@@ -3,7 +3,8 @@
 > SC6113 Individual Assignment · Financial Decentralized Application
 > Solidity · Ethereum Sepolia · MetaMask · Flask · SQLite · HTML/CSS/JS · Render
 
-**Live demo:** `https://<your-service>.onrender.com` ← replace after deploying
+**Live demo:** <https://chaincircle.onrender.com>
+**Source code:** <https://github.com/JacLaoky/chaincircle-dapp>
 **Smart contract (Sepolia):** [`0x8Fe1cf2c1927e66D8493Cee995e19Dd10698FB31`](https://sepolia.etherscan.io/address/0x8Fe1cf2c1927e66D8493Cee995e19Dd10698FB31)
 
 ---
