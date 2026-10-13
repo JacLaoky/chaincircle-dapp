@@ -3,7 +3,8 @@
 -- The blockchain is the source of truth for circles, payments and reputation.
 -- This table is an index/cache of every transaction sent from the web UI so that
 -- history can be queried quickly. Each row starts as 'pending' and is updated by
--- the backend only after it verifies the receipt on Sepolia via JSON-RPC.
+-- the backend only after it verifies the receipt on Sepolia via JSON-RPC: the receipt must
+-- succeed and contain an event emitted by the ChainCircle contract.
 
 CREATE TABLE IF NOT EXISTS transactions (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -16,6 +17,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     status        TEXT    NOT NULL DEFAULT 'pending',   -- pending | confirmed | failed
     block_number  INTEGER,                              -- filled after on-chain verification
     gas_used      INTEGER,                              -- filled after on-chain verification
+    block_time    INTEGER,                              -- block timestamp (unix seconds), filled after verification
     created_at    INTEGER NOT NULL,                     -- unix seconds
     updated_at    INTEGER NOT NULL                      -- unix seconds
 );

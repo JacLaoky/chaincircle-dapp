@@ -42,6 +42,7 @@
     historyScope: "mine",
     busy: new Set(),
     clockOffset: 0,
+    expiredSeen: new Set(), // "circleId:deadline" keys whose expiry already re-rendered the UI
   };
 
   // ------------------------------------------------------------------ utils
@@ -72,7 +73,9 @@
     return `${s}s`;
   };
 
-  const fmtTime = (unix) => new Date(unix * 1000).toLocaleString();
+  // Fixed English locale so dates look the same for every viewer (e.g. "13 Oct 2026, 16:23:24").
+  const fmtTime = (unix) =>
+    new Date(unix * 1000).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
   // Seconds, aligned to chain time if the local clock is noticeably off (see loadCircles).
   const now = () => Math.floor(Date.now() / 1000) + state.clockOffset;
 
@@ -514,6 +517,21 @@
       el.textContent = left > 0 ? `${fmtDuration(left)} left` : "Deadline passed";
       el.classList.toggle("expired", left <= 0);
     });
+
+    // When a round deadline passes, re-render so "Pay" turns into "Settle round" without a manual refresh.
+    let changed = false;
+    for (const c of state.circles) {
+      const key = `${c.id}:${c.deadline}`;
+      if (c.status === 1 && c.deadline && t > c.deadline && !state.expiredSeen.has(key)) {
+        state.expiredSeen.add(key);
+        changed = true;
+      }
+    }
+    if (changed) {
+      renderAll();
+      const openId = Number($("#modalContent").dataset.id);
+      if (openId && !$("#modal").classList.contains("hidden")) openDetails(openId);
+    }
   }
 
   // ------------------------------------------------------------------ history
@@ -535,7 +553,7 @@
       }
       body.innerHTML = transactions.map((t) => `
         <tr>
-          <td>${fmtTime(t.created_at)}</td>
+          <td>${fmtTime(t.block_time || t.created_at)}</td>
           <td><b>${escapeHtml(t.action)}</b></td>
           <td>${t.circle_id ? `#${t.circle_id}` : "—"}</td>
           <td>${escapeHtml(t.value_eth)}</td>

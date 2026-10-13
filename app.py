@@ -102,11 +102,11 @@ def row_to_dict(row):
 _hits = defaultdict(deque)
 
 
-def rate_limited(limit=30, window=60):
-    """Very small in-memory rate limiter for write endpoints (per client IP)."""
+def rate_limited(bucket, limit=30, window=60):
+    """Very small in-memory rate limiter for write endpoints (per client IP and endpoint)."""
     ip = request.headers.get("X-Forwarded-For", request.remote_addr or "?").split(",")[0].strip()
     now = time.time()
-    q = _hits[ip]
+    q = _hits[(bucket, ip)]
     while q and now - q[0] > window:
         q.popleft()
     if len(q) >= limit:
@@ -126,6 +126,29 @@ def rpc_call(method, params):
     if "error" in body:
         raise RuntimeError(body["error"].get("message", "RPC error"))
     return body.get("result")
+
+
+def receipt_is_valid(tx, receipt, claimed_from):
+    """
+    A transaction counts as confirmed only if it succeeded AND our contract emitted an event in it.
+
+    We deliberately do not require tx.to == CONTRACT_ADDRESS: smart-account wallets (e.g. MetaMask
+    accounts upgraded with EIP-7702) route calls through a delegation contract, so `to` is the
+    wallet's router while our contract is still the one executing. Every state-changing function
+    of ChainCircle emits an event, so "a log from our contract" is the reliable signal.
+    """
+    if receipt.get("status") != "0x1":
+        return False
+    contract = CONTRACT_ADDRESS.lower()
+    our_logs = [log for log in receipt.get("logs", []) if (log.get("address") or "").lower() == contract]
+    if contract and not our_logs:
+        return False
+    # The claimed wallet must be the sender, or appear as an indexed account in one of our events
+    # (covers relayed/sponsored transactions where a relayer pays the gas).
+    if (tx.get("from") or "").lower() == claimed_from:
+        return True
+    padded = "0x" + "0" * 24 + claimed_from[2:]
+    return any(padded in [t.lower() for t in log.get("topics", [])[1:]] for log in our_logs)
 
 
 def validate_transaction_payload(data):
@@ -234,7 +257,7 @@ def list_transactions():
             return error("circle_id must be an integer.")
         query += " AND circle_id = ?"
         params.append(int(circle_id))
-    query += " ORDER BY created_at DESC, id DESC LIMIT ?"
+    query += " ORDER BY COALESCE(block_time, created_at) DESC, id DESC LIMIT ?"
     params.append(limit)
 
     rows = get_db().execute(query, params).fetchall()
@@ -243,7 +266,7 @@ def list_transactions():
 
 @app.post("/api/transactions")
 def create_transaction():
-    if rate_limited():
+    if rate_limited("create"):
         return error("Too many requests, please slow down.", 429)
 
     clean, err = validate_transaction_payload(request.get_json(silent=True))
@@ -271,7 +294,7 @@ def create_transaction():
 @app.post("/api/transactions/<tx_hash>/verify")
 def verify_transaction(tx_hash):
     """Ask the blockchain (not the browser) whether the transaction succeeded."""
-    if rate_limited(limit=60):
+    if rate_limited("verify", limit=60):
         return error("Too many requests, please slow down.", 429)
     if not TX_HASH_RE.match(tx_hash):
         return error("Invalid transaction hash.")
@@ -280,12 +303,13 @@ def verify_transaction(tx_hash):
     row = db.execute("SELECT * FROM transactions WHERE tx_hash = ?", (tx_hash.lower(),)).fetchone()
     if row is None:
         return error("Transaction not found.", 404)
-    if row["status"] != "pending":
+    if row["status"] == "confirmed":
         return jsonify({"ok": True, "transaction": row_to_dict(row)})
 
     try:
         tx = rpc_call("eth_getTransactionByHash", [tx_hash])
         receipt = rpc_call("eth_getTransactionReceipt", [tx_hash])
+        block = rpc_call("eth_getBlockByNumber", [receipt["blockNumber"], False]) if receipt else None
     except (urllib.error.URLError, RuntimeError, TimeoutError, json.JSONDecodeError) as exc:
         return error(f"Could not reach the blockchain RPC: {exc}", 502)
 
@@ -299,16 +323,14 @@ def verify_transaction(tx_hash):
     if tx is None or receipt is None:
         return jsonify({"ok": True, "transaction": row_to_dict(row), "message": "Still pending."})
 
-    # Integrity checks: the tx must really come from the claimed wallet and target our contract.
-    status = "confirmed" if receipt.get("status") == "0x1" else "failed"
-    if (tx.get("from") or "").lower() != row["from_address"]:
-        status = "failed"
-    if CONTRACT_ADDRESS and (tx.get("to") or "").lower() != CONTRACT_ADDRESS.lower():
-        status = "failed"
+    status = "confirmed" if receipt_is_valid(tx, receipt, row["from_address"]) else "failed"
+    block_time = int(block["timestamp"], 16) if block else None
 
     db.execute(
-        "UPDATE transactions SET status = ?, block_number = ?, gas_used = ?, updated_at = ? WHERE tx_hash = ?",
-        (status, int(receipt["blockNumber"], 16), int(receipt["gasUsed"], 16), int(time.time()), tx_hash.lower()),
+        """UPDATE transactions SET status = ?, block_number = ?, gas_used = ?, block_time = ?, updated_at = ?
+           WHERE tx_hash = ?""",
+        (status, int(receipt["blockNumber"], 16), int(receipt["gasUsed"], 16), block_time,
+         int(time.time()), tx_hash.lower()),
     )
     db.commit()
     row = db.execute("SELECT * FROM transactions WHERE tx_hash = ?", (tx_hash.lower(),)).fetchone()

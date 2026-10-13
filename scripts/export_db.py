@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_PATH = ROOT / "database" / "schema.sql"
 COLUMNS = ["tx_hash", "action", "from_address", "circle_id", "value_eth", "status",
-           "block_number", "gas_used", "created_at", "updated_at"]
+           "block_number", "gas_used", "block_time", "created_at", "updated_at"]
 
 
 def http_json(url, method="GET", timeout=90):
