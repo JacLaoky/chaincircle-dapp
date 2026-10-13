@@ -12,3 +12,9 @@ broadcast/
 .DS_Store
 .claude/
 *.docx
+report/*.aux
+report/*.log
+report/*.fls
+report/*.fdb_latexmk
+report/*.out
+report/*.synctex.gz

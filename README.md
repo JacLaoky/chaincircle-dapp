@@ -5,13 +5,13 @@
 
 **Live demo:** <https://chaincircle.onrender.com>
 **Source code:** <https://github.com/JacLaoky/chaincircle-dapp>
-**Smart contract (Sepolia):** [`0x8Fe1cf2c1927e66D8493Cee995e19Dd10698FB31`](https://sepolia.etherscan.io/address/0x8Fe1cf2c1927e66D8493Cee995e19Dd10698FB31)
+**Smart contract (Sepolia):** [`0x8Fe1cf2c1927e66D8493Cee995e19Dd10698FB31`](https://sepolia.etherscan.io/address/0x8Fe1cf2c1927e66D8493Cee995e19Dd10698FB31) — source code verified on Etherscan (Exact Match)
 
 ---
 
 ## 1. Problem
 
-A **Rotating Savings and Credit Association (ROSCA)**, also known as 标会 / 合会 (China), tontine (West Africa),
+A **Rotating Savings and Credit Association (ROSCA)**, also known as *biaohui* / *hehui* (China), tontine (West Africa),
 susu (Ghana), chit fund (India) or tanda (Mexico), is one of the most widely used informal financial tools in
 the world, especially for people without access to banks. A group of members contributes a fixed amount every
 round, and each round one member receives the entire pot until everyone has received it once.
