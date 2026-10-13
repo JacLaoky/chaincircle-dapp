@@ -694,6 +694,7 @@
     } else {
       $("#sCoverage").textContent = "—";
       $("#sCoverageBar").style.width = "0";
+      $("#sCoverageHint").textContent = "Enter valid values to see how much of a default the collateral would cover.";
     }
   }
 
