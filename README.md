@@ -70,7 +70,7 @@ ChainCircle moves the whole ROSCA lifecycle into a Solidity smart contract:
 
 * **Blockchain = source of truth** (funds, membership, payments, reputation).
 * **Flask + SQLite = index/cache** of transactions for fast history queries. The backend never trusts the
-  browser: it re-checks every transaction's receipt, sender and target contract through JSON-RPC.
+  browser: it re-checks every transaction's receipt, sender and emitted events through JSON-RPC.
 * Private keys **never leave MetaMask**. The server holds no keys.
 
 ## 5. Project structure
@@ -123,7 +123,7 @@ Events: `CircleCreated`, `MemberJoined`, `MemberLeft`, `CircleStarted`, `Contrib
 | Unbounded gas | Members capped at 12, so every loop is bounded |
 | Integer overflow | Solidity ≥0.8 checked arithmetic; `unchecked` used only where overflow is impossible |
 | XSS from on-chain strings | All user-controlled text is HTML-escaped before rendering |
-| Forged history entries | The backend verifies receipt status, `from` and `to` via RPC before marking a transaction confirmed |
+| Forged history entries | The backend confirms a transaction only if its receipt succeeded, the sender matches and ChainCircle emitted an event in it |
 | Private-key exposure | Keys stay in MetaMask; the server stores no secrets |
 | Backend abuse | Request-size limit, rate limiting on write endpoints, strict regex validation, parameterised SQL |
 
@@ -157,13 +157,21 @@ Schema: [`database/schema.sql`](database/schema.sql), a single `transactions` ta
 | `circle_id` | Related circle (NULL when not applicable) |
 | `value_eth` | ETH sent (decimal string) |
 | `status` | `pending` → `confirmed` / `failed` (set only after on-chain verification) |
-| `block_number`, `gas_used` | Filled from the transaction receipt |
+| `block_number`, `gas_used`, `block_time` | Filled from the transaction receipt and its block |
 | `created_at`, `updated_at` | Unix timestamps |
 
 Lifecycle: the frontend `POST`s the hash after MetaMask sends the transaction (`pending`). The backend then calls
 `eth_getTransactionByHash` / `eth_getTransactionReceipt` and marks the row `confirmed` only if the receipt
-succeeded, the sender matches and the target is the ChainCircle contract. Otherwise the row is marked `failed`.
+succeeded, the sender matches (or is an indexed account in the event) and the receipt contains an event emitted by
+the ChainCircle contract. Otherwise the row is marked `failed`. Checking events rather than `tx.to` matters because
+smart-account wallets (e.g. MetaMask accounts upgraded with EIP-7702) route calls through a delegation contract.
 Hashes that never appear on-chain are marked `failed` after 30 minutes.
+
+On startup, if the database is empty (e.g. after a Render restart), `app.py` seeds it from
+`database/chaincircle_sample.db`, so the demo history is always visible.
+
+`database/chaincircle_sample.db` / `.csv` contain the 17 transactions of the live Sepolia demo
+(15 confirmed, 2 that genuinely reverted inside the wallet's delegation layer and were retried).
 
 Because Render's free disk is ephemeral, snapshot the live data with:
 
@@ -209,6 +217,11 @@ Environment variables:
 
 > Render's free tier has an ephemeral disk, so the SQLite history may reset when the service restarts.
 > On-chain data (circles, payments, reputation) is never lost.
+>
+> **Note:** MetaMask's security provider currently flags the new `chaincircle.onrender.com` subdomain as a
+> "malicious site" (a heuristic false positive common for shared `onrender.com` hosting; the domain is not on
+> MetaMask's public phishing list). The contract source is verified on Etherscan. A production deployment
+> should use a dedicated domain.
 
 ## 11. Testing
 

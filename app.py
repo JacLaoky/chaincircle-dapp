@@ -36,6 +36,7 @@ RPC_URL = os.environ.get("RPC_URL", "https://ethereum-sepolia-rpc.publicnode.com
 EXPLORER_URL = os.environ.get("EXPLORER_URL", "https://sepolia.etherscan.io")
 DATABASE_PATH = Path(os.environ.get("DATABASE_PATH", BASE_DIR / "instance" / "chaincircle.db"))
 ABI_PATH = BASE_DIR / "abi" / "ChainCircle.json"
+SAMPLE_DB_PATH = BASE_DIR / "database" / "chaincircle_sample.db"
 
 ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
 TX_HASH_RE = re.compile(r"^0x[0-9a-fA-F]{64}$")
@@ -81,6 +82,14 @@ def init_db():
     DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DATABASE_PATH) as db:
         db.executescript(SCHEMA)
+        # Render's free disk is wiped on every deploy/restart: re-seed the verified demo history so it is never empty.
+        empty = db.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == 0
+        if empty and SAMPLE_DB_PATH.exists() and SAMPLE_DB_PATH.resolve() != DATABASE_PATH.resolve():
+            db.execute("ATTACH DATABASE ? AS sample", (str(SAMPLE_DB_PATH),))
+            cols = "tx_hash, action, from_address, circle_id, value_eth, status, block_number, gas_used, block_time, created_at, updated_at"
+            db.execute(f"INSERT OR IGNORE INTO transactions ({cols}) SELECT {cols} FROM sample.transactions ORDER BY id")
+            db.commit()
+            db.execute("DETACH DATABASE sample")
 
 
 init_db()
